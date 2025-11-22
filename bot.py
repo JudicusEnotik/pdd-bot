@@ -1,7 +1,6 @@
-# bot_webhook.py
+# bot.py — полная версия для Render.com
 import logging
 import os
-import asyncio
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InputFile
 from telegram.ext import (
     Application,
@@ -31,7 +30,6 @@ BOT_TOKEN = "8514872881:AAGh8--wiPhO6Fe-9CzjGAEyWZZ7nzFF3oM"
 ADMIN_CHAT_ID = 8357988210
 CHECKLIST_PATH = "checklist.pdf"
 
-# --- Функции бота ---
 
 async def send_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отправляет только меню — без приветствия (для 'Назад')"""
@@ -239,29 +237,6 @@ async def get_phone_for_call(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return await send_main_menu(update, context)
 
 
-# --- Создание Application ---
-
-application = Application.builder().token(BOT_TOKEN).build()
-
-conv_handler = ConversationHandler(
-    entry_points=[
-        CommandHandler("start", start_command),
-        MessageHandler(filters.Regex(r"(?i)^(начать|старт|start)$"), start_command),
-    ],
-    states={
-        MAIN_MENU: [MessageHandler(filters.TEXT & ~filters.COMMAND, main_menu_handler)],
-        ABOUT_MENU: [MessageHandler(filters.TEXT & ~filters.COMMAND, about_menu_handler)],
-        CONSULTATION_MENU: [MessageHandler(filters.TEXT & ~filters.COMMAND, consultation_menu_handler)],
-        PHONE_CONSULTATION_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name_for_call)],
-        PHONE_CONSULTATION_PHONE: [
-            MessageHandler(filters.CONTACT, get_phone_for_call),
-            MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone_for_call),
-        ],
-    },
-    fallbacks=[],
-    allow_reentry=True,
-)
-
 async def fallback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip().lower()
     if text in {"начать", "старт", "start"}:
@@ -276,19 +251,50 @@ async def fallback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup,
         )
 
-application.add_handler(conv_handler)
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, fallback_handler))
 
-# --- Установка webhook ---
+# === ГЛАВНАЯ ФУНКЦИЯ ЗАПУСКА ===
+def main():
+    if not os.path.isfile(CHECKLIST_PATH):
+        logger.warning(f"❗ Файл подарка не найден: {CHECKLIST_PATH}. Положите файл в папку с ботом.")
 
-WEBHOOK_URL = "https://EnotikJUD.pythonanywhere.com/"
+    application = Application.builder().token(BOT_TOKEN).build()
 
-# Устанавливаем webhook один раз при импорте модуля
-try:
-    asyncio.run(application.bot.set_webhook(url=WEBHOOK_URL))
-    logger.info(f"✅ Webhook успешно установлен на {WEBHOOK_URL}")
-except Exception as e:
-    logger.error(f"❌ Ошибка при установке webhook: {e}")
+    conv_handler = ConversationHandler(
+        entry_points=[
+            CommandHandler("start", start_command),
+            MessageHandler(filters.Regex(r"(?i)^(начать|старт|start)$"), start_command),
+        ],
+        states={
+            MAIN_MENU: [MessageHandler(filters.TEXT & ~filters.COMMAND, main_menu_handler)],
+            ABOUT_MENU: [MessageHandler(filters.TEXT & ~filters.COMMAND, about_menu_handler)],
+            CONSULTATION_MENU: [MessageHandler(filters.TEXT & ~filters.COMMAND, consultation_menu_handler)],
+            PHONE_CONSULTATION_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name_for_call)],
+            PHONE_CONSULTATION_PHONE: [
+                MessageHandler(filters.CONTACT, get_phone_for_call),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone_for_call),
+            ],
+        },
+        fallbacks=[],
+        allow_reentry=True,
+    )
 
-# Экспортируем application для wsgi.py
-app = application
+    application.add_handler(conv_handler)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, fallback_handler))
+
+    # 🔥 ЗАПУСК ВЕБХУКА — БОТ БУДЕТ ЖИТЬ!
+    PORT = int(os.environ.get("PORT", 8443))
+    WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "https://pdd-bot.onrender.com")
+
+    logger.info(f"🚀 Запуск webhook на порту {PORT} | URL: {WEBHOOK_URL}/{BOT_TOKEN}")
+
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}",
+        url_path=BOT_TOKEN,
+        secret_token=BOT_TOKEN,
+    )
+
+
+if __name__ == "__main__":
+    main()
