@@ -292,9 +292,9 @@ def main():
         port=PORT,
         webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}",
         url_path=BOT_TOKEN,
-        secret_token=BOT_TOKEN,
     )
 
 
 if __name__ == "__main__":
     main()
+
